@@ -22,6 +22,8 @@ internal class NativeArtworkLoader(context: Context) {
         "headset_freeclip_earbuds" to 24,
     )
 
+    @Suppress("DiscouragedApi")
+    @android.annotation.SuppressLint("DiscouragedApi")
     private fun animatedFrames(id: String): Drawable? {
         val count = animatedFrameCounts[id] ?: return null
         val frames = ArrayList<Drawable>(count)
