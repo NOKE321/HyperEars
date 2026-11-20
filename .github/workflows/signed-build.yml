@@ -39,21 +39,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Restore release keystore
+      - name: Create local keystore
         shell: bash
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
-          test -n "$RELEASE_KEYSTORE_BASE64"
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/hyperears-release.jks"
-          chmod 600 "$RUNNER_TEMP/hyperears-release.jks"
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/hyperears.jks" \
+            -storepass hyperears -keypass hyperears \
+            -alias hyperears -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=HyperEars Local Build"
 
       - name: Build release
         env:
-          HYPEREARS_KEYSTORE_PATH: ${{ runner.temp }}/hyperears-release.jks
-          HYPEREARS_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          HYPEREARS_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          HYPEREARS_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          HYPEREARS_KEYSTORE_PATH: ${{ runner.temp }}/hyperears.jks
+          HYPEREARS_KEYSTORE_PASSWORD: hyperears
+          HYPEREARS_KEY_ALIAS: hyperears
+          HYPEREARS_KEY_PASSWORD: hyperears
         run: >-
           ./gradlew --no-daemon
           testDebugUnitTest
