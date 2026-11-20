@@ -16,9 +16,29 @@ internal class NativeArtworkLoader(context: Context) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
     }
 
+    /** 本地私有构建：把指定的 headset_ 前缀资源按帧号拼成帧动画。 */
+    private val animatedFrameCounts = mapOf(
+        "headset_generic_earbuds" to 24,   // 默认 TWS 耳机图 -> 帧动画
+        "headset_freeclip_earbuds" to 24,
+    )
+
+    private fun animatedFrames(id: String): Drawable? {
+        val count = animatedFrameCounts[id] ?: return null
+        val frames = ArrayList<Drawable>(count)
+        for (i in 1..count) {
+            val name = "%s_%02d".format(id, i)
+            val res = resources.getIdentifier(name, "drawable", ModuleContract.MODULE_PACKAGE)
+            if (res == 0) return null
+            @Suppress("DEPRECATION")
+            frames += resources.getDrawable(res, null)
+        }
+        return AutoStartAnimationDrawable().apply { addFrames(frames) }
+    }
+
     @Suppress("DiscouragedApi")
     @android.annotation.SuppressLint("DiscouragedApi")
     fun load(id: HeadsetArtworkId, fallback: HeadsetArtworkId): Drawable {
+        animatedFrames(id.value)?.let { return it }
         val bitmap = cache[id.value] ?: synchronized(cache) {
             cache[id.value] ?: run {
                 fun decode(name: String): Bitmap? {
