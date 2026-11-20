@@ -40,21 +40,6 @@ internal class NativeArtworkLoader(context: Context) {
 
     @Suppress("DiscouragedApi")
     @android.annotation.SuppressLint("DiscouragedApi")
-    private fun animatedFrames(id: String): Drawable? {
-        val count = animatedFrameCounts[id] ?: return null
-        val frames = ArrayList<Drawable>(count)
-        for (i in 1..count) {
-            val name = "%s_%02d".format(id, i)
-            val res = resources.getIdentifier(name, "drawable", ModuleContract.MODULE_PACKAGE)
-            if (res == 0) return null
-            @Suppress("DEPRECATION")
-            frames += resources.getDrawable(res, null)
-        }
-        return AutoStartAnimationDrawable().apply { addFrames(frames) }
-    }
-
-    @Suppress("DiscouragedApi")
-    @android.annotation.SuppressLint("DiscouragedApi")
     fun load(id: HeadsetArtworkId, fallback: HeadsetArtworkId): Drawable {
         animatedArtwork(id.value)?.let { return it }
         val bitmap = cache[id.value] ?: synchronized(cache) {
