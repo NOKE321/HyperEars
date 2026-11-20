@@ -19,7 +19,6 @@ internal class NativeArtworkLoader(context: Context) {
     /** 本地私有构建：把指定的 headset_ 前缀资源按帧号拼成帧动画。 */
     private val animatedFrameCounts = mapOf(
         "headset_generic_earbuds" to 24,   // 默认 TWS 耳机图 -> 帧动画
-        "headset_freeclip_earbuds" to 24,
     )
 
     @Suppress("DiscouragedApi")
