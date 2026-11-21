@@ -412,7 +412,21 @@ internal abstract class NativeWindowBridge(
                 val square = view.width == view.height && view.width >= 200
                 if (square || view.drawable is AutoStartDrawableWrapper) applyScale(view, scale)
             }
-            if (view is ViewGroup) for (i in 0 until view.childCount) visit(view.getChildAt(i))
+            if (view is ViewGroup) {
+                val name = if (view.id != View.NO_ID) {
+                    runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
+                } else null
+                if (name == "pairingCustom" || name == "pairingContentView") {
+                    val params = view.layoutParams
+                    if (params != null && params.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+                        params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                        view.layoutParams = params
+                        view.minimumHeight = 0
+                        ModuleLog.debug(TAG, "artwork tuning: shrink $name")
+                    }
+                }
+                for (i in 0 until view.childCount) visit(view.getChildAt(i))
+            }
         }
         visit(root)
         ModuleLog.debug(TAG, "artwork tuning: images=[$seen]")
