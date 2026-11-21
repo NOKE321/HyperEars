@@ -217,8 +217,24 @@ internal abstract class NativeWindowBridge(
         }
         installModelHooks()
         installContentNavigation(symbols.contentReady)
+        installImageViewHook()
         enabled = true
         ModuleLog.debug(TAG, "native window semantic hooks ready")
+    }
+
+    /** 图被塞进 ImageView 的瞬间就缩放，抢在任何一帧绘制之前。 */
+    private fun installImageViewHook() {
+        runCatching {
+            val setter = NativeMembers.method(
+                ImageView::class.java, "setImageDrawable", Drawable::class.java)
+            hookAfter(setter) {
+                val view = instance as? ImageView ?: return@hookAfter
+                val drawable = args[0] as? Drawable ?: return@hookAfter
+                if (drawable is AutoStartDrawableWrapper) {
+                    runCatching { applyScale(view, ARTWORK_SCALE) }
+                }
+            }
+        }.onFailure { ModuleLog.warn(TAG, "artwork setImageDrawable hook failed", it) }
     }
 
     private fun installContentNavigation(createDialog: Method) {
