@@ -358,10 +358,20 @@ internal abstract class NativeWindowBridge(
 
     /** 本地私有构建：把系统弹窗的方形图标槽位改成与素材同比例的宽矩形。 */
     private fun scheduleArtworkTuning(binding: Binding) {
-        val scale = ARTWORK_SCALE
-        val decor = binding.activity.window?.decorView as? ViewGroup ?: return
+        ModuleLog.debug(TAG, "artwork tuning: scheduled")
+        val decor = binding.activity.window?.decorView as? ViewGroup
+        if (decor == null) {
+            ModuleLog.debug(TAG, "artwork tuning: decorView null")
+            return
+        }
         for (delay in longArrayOf(250L, 700L, 1500L)) {
-            decor.postDelayed({ runCatching { tuneHeadsetImage(decor, scale) } }, delay)
+            decor.postDelayed({
+                try {
+                    tuneHeadsetImage(decor, ARTWORK_SCALE)
+                } catch (error: Throwable) {
+                    ModuleLog.warn(TAG, "artwork tuning failed", error)
+                }
+            }, delay)
         }
     }
 
@@ -372,6 +382,7 @@ internal abstract class NativeWindowBridge(
             return
         }
         ModuleLog.debug(TAG, "artwork tuning: found ${image.width}x${image.height}")
+        scaleAllSquareImages(root)
         val cardWidth = (root.width * 0.74f).toInt().coerceAtLeast(400)
         val width = (cardWidth * scale / 1.8f).toInt()
         val drawable = image.drawable
@@ -390,6 +401,26 @@ internal abstract class NativeWindowBridge(
             parent.clipChildren = false
             parent.clipToOutline = false
             parent = parent.parent
+        }
+    }
+
+    private fun scaleAllSquareImages(view: View) {
+        if (view is ImageView && view.width == view.height && view.width >= 120) {
+            val params = view.layoutParams
+            params.width = (view.width * 2.1f).toInt()
+            params.height = (view.width * 0.95f).toInt()
+            view.layoutParams = params
+            view.scaleType = ImageView.ScaleType.FIT_CENTER
+            var parent = view.parent
+            while (parent is ViewGroup) {
+                parent.clipChildren = false
+                parent.clipToOutline = false
+                parent = parent.parent
+            }
+            ModuleLog.debug(TAG, "artwork tuning: square image resized ${view.width}")
+        }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) scaleAllSquareImages(view.getChildAt(i))
         }
     }
 
