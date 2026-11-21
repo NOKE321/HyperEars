@@ -472,7 +472,7 @@ internal abstract class NativeWindowBridge(
     }
 
     companion object {
-        private const val ARTWORK_SCALE = 2.4f
+        private const val ARTWORK_SCALE = 1.05f
 
         const val PREFIX = "com.android.bluetooth.ble.app.fastconnect"
         private const val TAG = "NativeWindow"
