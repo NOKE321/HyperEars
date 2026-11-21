@@ -15,6 +15,9 @@ import android.os.IInterface
 import android.os.Looper
 import android.os.RemoteException
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import java.io.File
 import dev.hyperears.bridge.ModuleContract
 import dev.hyperears.bridge.NativePresentationContract
 import dev.hyperears.hook.HookContext
@@ -350,7 +353,39 @@ internal abstract class NativeWindowBridge(
         NativeMembers.set(binding.controller, "mHeadsetBoxIconDrawable",
             artwork.load(p.artwork.chargingCase ?: HeadsetArtwork.EARBUDS.chargingCase!!,
                 HeadsetArtwork.EARBUDS.chargingCase!!))
+        applyArtworkScale(binding)
     }
+
+    /** 本地私有构建：系统弹窗的图片槽位是固定尺寸，这里直接放大承载图标的 ImageView。 */
+    private fun applyArtworkScale(binding: Binding) {
+        val scale = artworkScale()
+        if (scale == 1f) return
+        val decor = binding.activity.window?.decorView as? ViewGroup ?: return
+        decor.post { runCatching { scaleArtwork(decor, scale) } }
+    }
+
+    private fun scaleArtwork(view: View, scale: Float) {
+        if (view is ImageView && view.drawable is AutoStartDrawableWrapper) {
+            view.scaleX = scale
+            view.scaleY = scale
+            var parent = view.parent
+            while (parent is ViewGroup) {
+                parent.clipChildren = false
+                parent.clipToOutline = false
+                parent = parent.parent
+            }
+        }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) scaleArtwork(view.getChildAt(i), scale)
+        }
+    }
+
+    private fun artworkScale(): Float = runCatching {
+        val dir = context.createPackageContext(ModuleContract.MODULE_PACKAGE, 0).filesDir
+        val file = File(dir, "artscale.txt")
+        if (!file.isFile) return 1f
+        file.readText().trim().toFloatOrNull()?.coerceIn(0.5f, 4f) ?: 1f
+    }.getOrDefault(1f)
 
     protected fun charging(p: NativeHeadsetProjection): Int =
         (if (p.left.charging) 1 else 0) or (if (p.right.charging) 2 else 0) or
