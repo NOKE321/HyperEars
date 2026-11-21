@@ -377,6 +377,7 @@ internal abstract class NativeWindowBridge(
         val dialog = runCatching {
             NativeMembers.field(binding.activity.javaClass, "mPairingAlert").get(binding.activity) as? Dialog
         }.getOrNull()
+        runCatching { dialog?.window?.setWindowAnimations(0) }
         val root = (dialog?.window?.decorView as? ViewGroup)
             ?: (binding.activity.window?.decorView as? ViewGroup)
             ?: return
@@ -403,6 +404,7 @@ internal abstract class NativeWindowBridge(
     }
 
     private fun tuneArtwork(root: ViewGroup, scale: Float) {
+        if (root.width < 800) return
         val seen = StringBuilder()
         fun visit(view: View) {
             if (view is ImageView) {
