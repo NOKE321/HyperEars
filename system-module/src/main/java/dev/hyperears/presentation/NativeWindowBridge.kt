@@ -158,6 +158,7 @@ internal abstract class NativeWindowBridge(
                     onOpened(request.id, binding.binder)
                     ModuleLog.debug(TAG, "created address=${maskBluetoothAddress(request.state.address)} " +
                         "revision=${request.state.revision} single=${projection(binding).singleBattery}")
+                    scheduleArtworkTuning(binding)
                 }
             } catch (error: Throwable) {
                 binding.closing = true
@@ -353,31 +354,49 @@ internal abstract class NativeWindowBridge(
         NativeMembers.set(binding.controller, "mHeadsetBoxIconDrawable",
             artwork.load(p.artwork.chargingCase ?: HeadsetArtwork.EARBUDS.chargingCase!!,
                 HeadsetArtwork.EARBUDS.chargingCase!!))
-        applyArtworkScale(binding)
     }
 
-    /** 本地私有构建：系统弹窗的图片槽位是固定尺寸，这里直接放大承载图标的 ImageView。 */
-    private fun applyArtworkScale(binding: Binding) {
+    /** 本地私有构建：把系统弹窗的方形图标槽位改成与素材同比例的宽矩形。 */
+    private fun scheduleArtworkTuning(binding: Binding) {
         val scale = artworkScale()
         if (scale == 1f) return
         val decor = binding.activity.window?.decorView as? ViewGroup ?: return
-        decor.post { runCatching { scaleArtwork(decor, scale) } }
+        for (delay in longArrayOf(250L, 700L, 1500L)) {
+            decor.postDelayed({ runCatching { tuneHeadsetImage(decor, scale) } }, delay)
+        }
     }
 
-    private fun scaleArtwork(view: View, scale: Float) {
-        if (view is ImageView && view.drawable is AutoStartDrawableWrapper) {
-            view.scaleX = scale
-            view.scaleY = scale
-            var parent = view.parent
-            while (parent is ViewGroup) {
-                parent.clipChildren = false
-                parent.clipToOutline = false
-                parent = parent.parent
-            }
+    private fun tuneHeadsetImage(root: ViewGroup, scale: Float) {
+        val view = findHeadsetImage(root) ?: return
+        val cardWidth = (root.width * 0.74f).toInt().coerceAtLeast(400)
+        val width = (cardWidth * scale / 1.8f).toInt()
+        val aspect = if (view.drawable != null && view.drawable.intrinsicWidth > 0) {
+            view.drawable.intrinsicHeight.toFloat() / view.drawable.intrinsicWidth
+        } else {
+            428f / 900f
+        }
+        val params = view.layoutParams
+        params.width = width
+        params.height = (width * aspect).toInt()
+        view.layoutParams = params
+        if (view is ImageView) view.scaleType = ImageView.ScaleType.FIT_CENTER
+        var parent = view.parent
+        while (parent is ViewGroup) {
+            parent.clipChildren = false
+            parent.clipToOutline = false
+            parent = parent.parent
+        }
+    }
+
+    private fun findHeadsetImage(view: View): View? {
+        if (view is ImageView && view.id != View.NO_ID) {
+            val name = runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
+            if (name == "imageViewHeadset") return view
         }
         if (view is ViewGroup) {
-            for (i in 0 until view.childCount) scaleArtwork(view.getChildAt(i), scale)
+            for (i in 0 until view.childCount) findHeadsetImage(view.getChildAt(i))?.let { return it }
         }
+        return null
     }
 
     private fun artworkScale(): Float = runCatching {
