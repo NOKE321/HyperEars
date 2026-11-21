@@ -31,6 +31,8 @@ object HuaweiFreebudsSppCodec {
     const val CMD_NOISE_STATE = 0x2B2A
     const val CMD_NOISE_WRITE = 0x2B04
     const val CMD_NOISE_CHANGE_NOTIFY = 0x2B03
+    const val CMD_SOUND_EFFECT_WRITE = 0x2B49
+    const val CMD_SOUND_EFFECT_STATE = 0x2B4A
 
     enum class NoiseMode(val wire: Int) {
         OFF(0x00),
@@ -198,6 +200,34 @@ object HuaweiFreebudsSppCodec {
         val mode = NoiseMode.entries.firstOrNull { it.wire == data[1].unsigned() } ?: return null
         val level = data[0].unsigned().takeIf { mode != NoiseMode.OFF }
         return NoiseState(mode, level)
+    }
+
+    /**
+     * 音效预设（HUAWEI FreeClip 实测）：`2B 49` 写入所选音效，参数 1 为一个字节的音效 id；
+     * 设好后耳机回 `7F 04 ...`，并用 `2B 4A` 回读当前音效。
+     */
+    enum class SoundEffect(val wire: Int) {
+        STANDARD(0x01),
+        SPORT(0x0A),
+        VOCALS(0x09),
+    }
+
+    /** 构建 `2B 49` 音效切换帧：参数 1 = `[effect]`。 */
+    fun soundEffectCommand(effect: SoundEffect): ByteArray =
+        packet(CMD_SOUND_EFFECT_WRITE, listOf(1 to byteArrayOf(effect.wire.toByte())))
+
+    /** 查询当前音效（`2B 4A`），参数布局与降噪查询一致。 */
+    val querySoundEffect: ByteArray = packet(
+        CMD_SOUND_EFFECT_STATE,
+        listOf(1 to byteArrayOf(), 2 to byteArrayOf()),
+    )
+
+    /** 解码 `2B 4A` 上报；参数 1 或参数 2 的第一个字节为当前音效 id。 */
+    fun parseSoundEffectState(bytes: ByteArray): SoundEffect? {
+        val frame = parseFrame(bytes) ?: return null
+        if (frame.command != CMD_SOUND_EFFECT_STATE) return null
+        val value = (frame.params[1] ?: frame.params[2])?.firstOrNull() ?: return null
+        return SoundEffect.entries.firstOrNull { it.wire == value.unsigned() }
     }
 
     /**
