@@ -24,21 +24,32 @@ internal class NativeArtworkLoader(context: Context) {
     /** 本地私有构建：命中时返回流式播放的动画 WebP（AnimatedImageDrawable）。 */
     private val animatedArtworks = setOf("headset_generic_earbuds", "headset_generic_case")
 
+    /**
+     * 动画实例按 id 复用：宿主刷新电量会重新 setImageDrawable，
+     * 每次重新解码既慢又会让动画从头开始，所以同一个 id 只解码一次。
+     */
+    private val animated = mutableMapOf<String, AutoStartDrawableWrapper>()
+
     @Suppress("DiscouragedApi")
     @android.annotation.SuppressLint("DiscouragedApi")
     private fun animatedArtwork(id: String): Drawable? {
         if (id !in animatedArtworks) return null
+        animated[id]?.let { return it }
         val res = resources.getIdentifier("${id}_anim", "drawable", ModuleContract.MODULE_PACKAGE)
         if (res == 0) return null
         return runCatching {
             val decoded = ImageDecoder.decodeDrawable(ImageDecoder.createSource(resources, res))
             if (decoded is AnimatedImageDrawable) {
-                decoded.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
-                AutoStartDrawableWrapper(decoded, filesDir)
+                AutoStartDrawableWrapper(decoded, filesDir).also { animated[id] = it }
             } else {
                 decoded
             }
         }.getOrNull()
+    }
+
+    /** 弹窗关闭时停掉动画，不让它在后台继续跑帧。 */
+    fun stopAnimations() {
+        animated.values.forEach { it.stop() }
     }
 
     @Suppress("DiscouragedApi")
