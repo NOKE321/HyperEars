@@ -358,8 +358,7 @@ internal abstract class NativeWindowBridge(
 
     /** 本地私有构建：把系统弹窗的方形图标槽位改成与素材同比例的宽矩形。 */
     private fun scheduleArtworkTuning(binding: Binding) {
-        val scale = artworkScale()
-        if (scale == 1f) return
+        val scale = ARTWORK_SCALE
         val decor = binding.activity.window?.decorView as? ViewGroup ?: return
         for (delay in longArrayOf(250L, 700L, 1500L)) {
             decor.postDelayed({ runCatching { tuneHeadsetImage(decor, scale) } }, delay)
@@ -367,7 +366,12 @@ internal abstract class NativeWindowBridge(
     }
 
     private fun tuneHeadsetImage(root: ViewGroup, scale: Float) {
-        val image = findHeadsetImage(root) as? ImageView ?: return
+        val image = findHeadsetImage(root) as? ImageView
+        if (image == null) {
+            ModuleLog.debug(TAG, "artwork tuning: headset image not found")
+            return
+        }
+        ModuleLog.debug(TAG, "artwork tuning: found ${image.width}x${image.height}")
         val cardWidth = (root.width * 0.74f).toInt().coerceAtLeast(400)
         val width = (cardWidth * scale / 1.8f).toInt()
         val drawable = image.drawable
@@ -390,22 +394,26 @@ internal abstract class NativeWindowBridge(
     }
 
     private fun findHeadsetImage(view: View): View? {
-        if (view is ImageView && view.id != View.NO_ID) {
+        if (view is ImageView) {
+            if (view.drawable is AutoStartDrawableWrapper) return view
             val name = runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
             if (name == "imageViewHeadset") return view
         }
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) findHeadsetImage(view.getChildAt(i))?.let { return it }
+            // 兜底：弹窗里最大的正方形 ImageView
+            var best: ImageView? = null
+            for (i in 0 until view.childCount) {
+                val child = view.getChildAt(i)
+                if (child is ImageView && child.width == child.height && child.width > 120 &&
+                    (best == null || child.width > best!!.width)) best = child
+            }
+            if (best != null) return best
         }
         return null
     }
 
-    private fun artworkScale(): Float = runCatching {
-        val dir = context.createPackageContext(ModuleContract.MODULE_PACKAGE, 0).filesDir
-        val file = File(dir, "artscale.txt")
-        if (!file.isFile) return 1f
-        file.readText().trim().toFloatOrNull()?.coerceIn(0.5f, 4f) ?: 1f
-    }.getOrDefault(1f)
+getOrDefault(1f)
 
     protected fun charging(p: NativeHeadsetProjection): Int =
         (if (p.left.charging) 1 else 0) or (if (p.right.charging) 2 else 0) or
@@ -445,6 +453,8 @@ internal abstract class NativeWindowBridge(
     }
 
     companion object {
+        private const val ARTWORK_SCALE = 1.9f
+
         const val PREFIX = "com.android.bluetooth.ble.app.fastconnect"
         private const val TAG = "NativeWindow"
     }
