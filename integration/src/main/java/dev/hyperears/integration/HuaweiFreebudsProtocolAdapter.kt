@@ -321,8 +321,15 @@ internal class HuaweiFreeClipAdapter : HuaweiFreebudsProtocolAdapter(
     override val displayName: String = "HUAWEI FreeClip"
     override val resolution: AdapterResolution = AdapterResolution.EXACT_MATCH
 
-    override val miLinkCardPresentationId: MiLinkCardPresentationId? =
-        HuaweiMiLinkPresentationIds.SOUND_EFFECT
+    /**
+     * 呈现 id 必须等到协议证据（电量帧）之后才给出：初始注册时它是 null，
+     * 否则会触发 EarbudAdapterRegistry「初始私有适配器必须锁定厂商能力」的断言，
+     * 直接让蓝牙进程初始化崩掉、耳机连不上。
+     */
+    override val miLinkCardPresentationId: MiLinkCardPresentationId?
+        get() = HuaweiMiLinkPresentationIds.SOUND_EFFECT.takeIf {
+            runtimeState().features.get<BatteryFeatureState>() != null
+        }
 
     override fun matches(identity: EarbudIdentity): Boolean =
         super.matches(identity) &&
