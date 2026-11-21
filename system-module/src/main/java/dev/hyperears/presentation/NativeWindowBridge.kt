@@ -385,7 +385,7 @@ internal abstract class NativeWindowBridge(
         fun visit(view: View) {
             if (view is ImageView) {
                 seen.append(view.width).append('x').append(view.height).append(' ')
-                val square = view.width == view.height && view.width >= 80
+                val square = view.width == view.height && view.width >= 200
                 val ours = view.drawable is AutoStartDrawableWrapper
                 if (square || ours) resize(view, scale)
             }
@@ -396,64 +396,21 @@ internal abstract class NativeWindowBridge(
     }
 
     private fun resize(view: ImageView, scale: Float) {
-        val base = if (view.width > 0) view.width else 352
-        val params = view.layoutParams
-        params.width = (base * scale).toInt()
-        params.height = (base * scale * 0.48f).toInt()
-        view.layoutParams = params
-        view.scaleType = ImageView.ScaleType.FIT_CENTER
+        // 用变换矩阵放大：系统每次重新布局会重置 LayoutParams，但不会重置 scale。
+        if (view.scaleX != scale) {
+            view.scaleX = scale
+            view.scaleY = scale
+            view.pivotX = view.width / 2f
+            view.pivotY = view.height / 2f
+        }
         var parent = view.parent
         while (parent is ViewGroup) {
             parent.clipChildren = false
             parent.clipToOutline = false
             parent = parent.parent
         }
-        ModuleLog.debug(TAG, "artwork tuning: resized ${base} -> ${params.width}x${params.height}")
+        ModuleLog.debug(TAG, "artwork tuning: scaled ${view.width} by $scale")
     }
 
 
-
-    protected fun charging(p: NativeHeadsetProjection): Int =
-        (if (p.left.charging) 1 else 0) or (if (p.right.charging) 2 else 0) or
-            (if (p.chargingCase.charging) 4 else 0)
-
-    protected fun setInt(owner: Any, method: String, value: Int) =
-        NativeMembers.method(owner.javaClass, method, Int::class.javaPrimitiveType!!).invoke(owner, value)
-
-    protected fun close(binding: Binding, reason: String) {
-        if (!binding.active || binding.closing || binding.activity.isFinishing) return
-        binding.closing = true
-        binding.navigation?.release()
-        binding.navigation = null
-        ModuleLog.debug(TAG, "close address=${maskBluetoothAddress(binding.state.address)} reason=$reason")
-        val closed = binding.callback?.let {
-            runCatching {
-                if (serviceContract.closeWithAddress) callbackType.getMethod(serviceContract.close, String::class.java).invoke(it, binding.state.address)
-                else callbackType.getMethod(serviceContract.close).invoke(it)
-            }.isSuccess
-        } == true
-        if (!closed) binding.activity.finish()
-    }
-
-    private fun release(binding: Binding) {
-        if (!binding.active) return
-        binding.active = false
-        binding.navigation?.release()
-        binding.navigation = null
-        binding.callback = null
-        binding.bound = false
-        controllers.remove(binding.controller)
-        activities.remove(binding.activity)
-        runCatching { onReleased(binding) }.onFailure { ModuleLog.warn(TAG, "native display cleanup failed", it) }
-        runCatching { binding.request.producer.unlinkToDeath(binding.death, 0) }
-        onClosed(binding.request.id)
-        ModuleLog.debug(TAG, "released address=${maskBluetoothAddress(binding.state.address)}")
-    }
-
-    companion object {
-        private const val ARTWORK_SCALE = 1.9f
-
-        const val PREFIX = "com.android.bluetooth.ble.app.fastconnect"
-        private const val TAG = "NativeWindow"
-    }
 }
