@@ -36,7 +36,7 @@ internal class NativePopupBatteryLayout private constructor(
         }
         // 本地私有构建：左右耳报同一个电量时，宿主仍会画两行（左耳/右耳）。
         // 这里把第二行收起来，只留一行「耳机」，跟华为卡片一致。
-        if (containers.getValue(EARS).visibility == View.VISIBLE && projection.mergedEars) {
+        if (containers.getValue(EARS).visibility == View.VISIBLE && !projection.singleBattery) {
             changed = mergeEarRows(containers.getValue(EARS)) || changed
         }
         return changed
