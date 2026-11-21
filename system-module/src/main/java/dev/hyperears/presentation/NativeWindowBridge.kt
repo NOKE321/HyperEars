@@ -367,20 +367,21 @@ internal abstract class NativeWindowBridge(
     }
 
     private fun tuneHeadsetImage(root: ViewGroup, scale: Float) {
-        val view = findHeadsetImage(root) ?: return
+        val image = findHeadsetImage(root) as? ImageView ?: return
         val cardWidth = (root.width * 0.74f).toInt().coerceAtLeast(400)
         val width = (cardWidth * scale / 1.8f).toInt()
-        val aspect = if (view.drawable != null && view.drawable.intrinsicWidth > 0) {
-            view.drawable.intrinsicHeight.toFloat() / view.drawable.intrinsicWidth
+        val drawable = image.drawable
+        val aspect = if (drawable != null && drawable.intrinsicWidth > 0) {
+            drawable.intrinsicHeight.toFloat() / drawable.intrinsicWidth
         } else {
             428f / 900f
         }
-        val params = view.layoutParams
+        val params = image.layoutParams
         params.width = width
         params.height = (width * aspect).toInt()
-        view.layoutParams = params
-        if (view is ImageView) view.scaleType = ImageView.ScaleType.FIT_CENTER
-        var parent = view.parent
+        image.layoutParams = params
+        image.scaleType = ImageView.ScaleType.FIT_CENTER
+        var parent = image.parent
         while (parent is ViewGroup) {
             parent.clipChildren = false
             parent.clipToOutline = false
