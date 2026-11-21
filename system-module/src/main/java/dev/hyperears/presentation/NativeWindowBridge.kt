@@ -419,10 +419,12 @@ internal abstract class NativeWindowBridge(
     }
 
     private fun applyScale(view: ImageView, scale: Float) {
+        if (view.width > 0 && view.height > 0) {
+            view.pivotX = view.width / 2f
+            view.pivotY = view.height / 2f
+        }
         view.scaleX = scale
         view.scaleY = scale
-        view.pivotX = view.width / 2f
-        view.pivotY = view.height / 2f
         var parent = view.parent
         while (parent is ViewGroup) {
             parent.clipChildren = false
