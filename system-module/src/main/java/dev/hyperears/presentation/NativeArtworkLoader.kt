@@ -14,6 +14,7 @@ import dev.hyperears.integration.HeadsetArtworkId
 /** Only bundled, namespaced resources can cross into the native host. No paths or network URLs. */
 internal class NativeArtworkLoader(context: Context) {
     private val resources = context.packageManager.getResourcesForApplication(ModuleContract.MODULE_PACKAGE)
+    private val filesDir = context.filesDir
     private val cache = object : LruCache<String, Bitmap>(4 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
     }
@@ -31,7 +32,7 @@ internal class NativeArtworkLoader(context: Context) {
             val decoded = ImageDecoder.decodeDrawable(ImageDecoder.createSource(resources, res))
             if (decoded is AnimatedImageDrawable) {
                 decoded.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
-                AutoStartDrawableWrapper(decoded)
+                AutoStartDrawableWrapper(decoded, filesDir)
             } else {
                 decoded
             }
