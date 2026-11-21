@@ -364,7 +364,7 @@ internal abstract class NativeWindowBridge(
         val root = (dialog?.window?.decorView as? ViewGroup)
             ?: (binding.activity.window?.decorView as? ViewGroup)
             ?: return
-        for (delay in longArrayOf(200L, 600L, 1200L)) {
+        for (delay in longArrayOf(0L, 50L, 120L, 300L, 700L, 1400L)) {
             root.postDelayed({
                 try {
                     tuneArtwork(root, ARTWORK_SCALE)
@@ -441,7 +441,7 @@ internal abstract class NativeWindowBridge(
     }
 
     companion object {
-        private const val ARTWORK_SCALE = 1.9f
+        private const val ARTWORK_SCALE = 2.4f
 
         const val PREFIX = "com.android.bluetooth.ble.app.fastconnect"
         private const val TAG = "NativeWindow"
