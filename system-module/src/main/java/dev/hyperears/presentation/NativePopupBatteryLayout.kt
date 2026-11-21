@@ -2,7 +2,10 @@ package dev.hyperears.presentation
 
 import android.annotation.SuppressLint
 import android.view.View
+import android.view.ViewGroup
 import android.widget.RelativeLayout
+import android.widget.TableRow
+import android.widget.TextView
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
@@ -31,7 +34,45 @@ internal class NativePopupBatteryLayout private constructor(
             changed = changed || view.visibility != visibility
             view.visibility = visibility
         }
+        // 本地私有构建：左右耳报同一个电量时，宿主仍会画两行（左耳/右耳）。
+        // 这里把第二行收起来，只留一行「耳机」，跟华为卡片一致。
+        if (containers.getValue(EARS).visibility == View.VISIBLE && projection.mergedEars) {
+            changed = mergeEarRows(containers.getValue(EARS)) || changed
+        }
         return changed
+    }
+
+    private fun mergeEarRows(container: View): Boolean {
+        val rows = mutableListOf<View>()
+        fun collect(view: View) {
+            if (view is TableRow) {
+                rows += view
+                return
+            }
+            if (view is ViewGroup) for (index in 0 until view.childCount) collect(view.getChildAt(index))
+        }
+        collect(container)
+        if (rows.size < 2) return false
+        var changed = false
+        rows.drop(1).forEach { row ->
+            if (row.visibility != View.GONE) {
+                row.visibility = View.GONE
+                changed = true
+            }
+        }
+        renameEarLabel(rows.first())
+        return changed
+    }
+
+    private fun renameEarLabel(row: View) {
+        val label = firstText(row) ?: return
+        if (label.text?.startsWith("左") == true && label.text != EAR_LABEL) label.text = EAR_LABEL
+    }
+
+    private fun firstText(view: View): TextView? = when {
+        view is TextView && !view.text.isNullOrBlank() -> view
+        view is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { firstText(view.getChildAt(it)) }
+        else -> null
     }
 
     companion object {
@@ -39,6 +80,7 @@ internal class NativePopupBatteryLayout private constructor(
         private const val BATTERY = "textViewBoxBattery"
         private const val SINGLE = "textViewHeadsetBatterySingle"
         private const val EARS = "textViewHeadsetBattery"
+        private const val EAR_LABEL = "耳机"
         private val CONTAINERS = listOf(IMAGE, BATTERY, SINGLE, EARS)
 
         // Exact R classes from the verified host plugins; numeric IDs are read from the loaded APK.
