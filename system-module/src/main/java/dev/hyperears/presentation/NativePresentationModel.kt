@@ -51,8 +51,11 @@ data class NativeHeadsetProjection(
             val address = state.address ?: return null
             if (!state.sessionActive) return null
             val battery = state.battery
-            val single = adapter.batterySource == BatterySource.SYSTEM_AGGREGATE ||
-                battery.overall.available || adapter.formFactor == HeadsetFormFactor.HEADPHONES
+            // 本地私有构建：组件电量可用时优先展开展示（左右耳 + 充电盒），
+            // 而不是合并成单电量；仅当没有任何组件数据时才回退成单值。
+            val single = adapter.formFactor == HeadsetFormFactor.HEADPHONES ||
+                (!battery.left.available && !battery.right.available &&
+                    adapter.batterySource == BatterySource.SYSTEM_AGGREGATE)
             val unknown = BatteryReading(null, false)
             return NativeHeadsetProjection(
                 address = address,
