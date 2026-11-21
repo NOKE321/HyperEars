@@ -274,6 +274,7 @@ internal abstract class NativeWindowBridge(
                 val root = args[0] as? View ?: return@runCatching
                 if (root !== NativeMembers.get(binding.controller, "mView")) return@runCatching
                 val p = projection(binding)
+                runCatching { (root as? ViewGroup)?.let { tuneArtwork(it, ARTWORK_SCALE) } }
                 if (layout.apply(root, p)) {
                     ModuleLog.debug(TAG) {
                         "battery layout updated in place single=${p.singleBattery} " +
@@ -381,30 +382,32 @@ internal abstract class NativeWindowBridge(
         val root = (dialog?.window?.decorView as? ViewGroup)
             ?: (binding.activity.window?.decorView as? ViewGroup)
             ?: return
-        // 绘制前应用，避免首帧先显示小图再跳大
+        // 绘制前应用，避免首帧先显示小图再跳大；只在前 1.5 秒监听，
+        // 之后交给渲染回调触发，避免每帧都去改布局。
+        val deadline = android.os.SystemClock.uptimeMillis() + 1500L
         root.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
-                try {
-                    tuneArtwork(root, ARTWORK_SCALE)
-                } catch (error: Throwable) {
-                    ModuleLog.warn(TAG, "artwork preDraw failed", error)
+                runCatching { tuneArtwork(root, ARTWORK_SCALE) }.onFailure {
+                    ModuleLog.warn(TAG, "artwork preDraw failed", it)
+                }
+                if (android.os.SystemClock.uptimeMillis() >= deadline) {
+                    runCatching { root.viewTreeObserver.removeOnPreDrawListener(this) }
                 }
                 return true
             }
         })
         for (delay in longArrayOf(120L, 400L, 900L, 1600L)) {
             root.postDelayed({
-                try {
-                    tuneArtwork(root, ARTWORK_SCALE)
-                } catch (error: Throwable) {
-                    ModuleLog.warn(TAG, "artwork tuning failed", error)
+                runCatching { tuneArtwork(root, ARTWORK_SCALE) }.onFailure {
+                    ModuleLog.warn(TAG, "artwork tuning failed", it)
                 }
             }, delay)
         }
+        root.postDelayed({ runCatching { dumpTree(root) } }, 700L)
     }
 
     private fun tuneArtwork(root: ViewGroup, scale: Float) {
-        if (root.width < 800) return
+        if (root.width < 400) return
         val seen = StringBuilder()
         fun visit(view: View) {
             if (view is ImageView) {
@@ -416,7 +419,7 @@ internal abstract class NativeWindowBridge(
                 val name = if (view.id != View.NO_ID) {
                     runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
                 } else null
-                if (name == "pairingCustom" || name == "pairingContentView") {
+                if (name != null && name in SHRINK_IDS) {
                     val params = view.layoutParams
                     if (params != null && params.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
                         params.height = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -430,6 +433,27 @@ internal abstract class NativeWindowBridge(
         }
         visit(root)
         ModuleLog.debug(TAG, "artwork tuning: images=[$seen]")
+    }
+
+    /** 一次性打印弹窗视图树，便于按 id/文字精确定位要调整的行。 */
+    private fun dumpTree(root: ViewGroup) {
+        val builder = StringBuilder()
+        fun visit(view: View, depth: Int) {
+            if (depth > 14) return
+            repeat(depth) { builder.append('.') }
+            val name = if (view.id != View.NO_ID) {
+                runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
+            } else null
+            builder.append(view.javaClass.simpleName)
+            if (name != null) builder.append('#').append(name)
+            builder.append(' ').append(view.width).append('x').append(view.height)
+            if (view.visibility != View.VISIBLE) builder.append(" vis=").append(view.visibility)
+            (view as? android.widget.TextView)?.text?.let { if (it.isNotEmpty()) builder.append(" \"").append(it).append('"') }
+            builder.append('\n')
+            if (view is ViewGroup) for (i in 0 until view.childCount) visit(view.getChildAt(i), depth + 1)
+        }
+        visit(root, 0)
+        ModuleLog.debug(TAG, "artwork tuning: tree\n$builder")
     }
 
     private fun applyScale(view: ImageView, scale: Float) {
@@ -481,12 +505,21 @@ internal abstract class NativeWindowBridge(
         activities.remove(binding.activity)
         runCatching { onReleased(binding) }.onFailure { ModuleLog.warn(TAG, "native display cleanup failed", it) }
         runCatching { binding.request.producer.unlinkToDeath(binding.death, 0) }
+        runCatching { artwork.stopAnimations() }
         onClosed(binding.request.id)
         ModuleLog.debug(TAG, "released address=${maskBluetoothAddress(binding.state.address)}")
     }
 
     companion object {
         private const val ARTWORK_SCALE = 1.05f
+
+        /** 宿主的这几个容器带固定高度，是弹窗下方那片空白的主要来源。 */
+        private val SHRINK_IDS = setOf(
+            "pairingCustom",
+            "pairingContentView",
+            "groupDialog",
+            "groupConnectSuccess",
+        )
 
         const val PREFIX = "com.android.bluetooth.ble.app.fastconnect"
         private const val TAG = "NativeWindow"
