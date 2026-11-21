@@ -15,6 +15,7 @@ import java.io.File
  */
 internal class AutoStartDrawableWrapper(
     private val animated: AnimatedImageDrawable,
+    private val filesDir: File?,
 ) : DrawableWrapper(animated) {
 
     override fun setVisible(visible: Boolean, restart: Boolean): Boolean {
@@ -28,13 +29,13 @@ internal class AutoStartDrawableWrapper(
     override fun getIntrinsicHeight(): Int = (super.getIntrinsicHeight() * scale()).toInt()
 
     private fun scale(): Float = runCatching {
-        val file = File(SCALE_FILE)
+        val file = File(filesDir ?: return DEFAULT_SCALE, SCALE_NAME)
         if (!file.isFile) return DEFAULT_SCALE
         file.readText().trim().toFloatOrNull()?.coerceIn(0.5f, 4.0f) ?: DEFAULT_SCALE
     }.getOrDefault(DEFAULT_SCALE)
 
     private companion object {
-        const val SCALE_FILE = "/data/user/0/dev.hyperears/files/artscale.txt"
+        const val SCALE_NAME = "artscale.txt"
         const val DEFAULT_SCALE = 1.8f
     }
 }
