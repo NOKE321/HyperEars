@@ -30,10 +30,7 @@ internal object HuaweiSoundEffectMiLinkCardAdapter : MiLinkCardAdapter {
     override val nativeSurface: MiLinkNativeCardSurface =
         MiLinkNativeCardSurface.ANC_THREE_STATE
 
-    override fun nativeSurfaceNoiseMode(state: EarbudState): NoiseMode? =
-        NoiseMode.ANC.takeIf {
-            state.features.get<HuaweiSoundEffectFeatureState>() != null
-        }
+    override fun nativeSurfaceNoiseMode(state: EarbudState): NoiseMode? = NoiseMode.ANC
 
     override fun bind(
         root: View,
@@ -85,11 +82,13 @@ internal object HuaweiSoundEffectMiLinkCardAdapter : MiLinkCardAdapter {
     ) : MiLinkCardBinding {
         private val items = items.map(::WeakReference)
         private var lastRendered: HuaweiSoundEffectCardPolicy.CardState? = null
+        /** 耳机通常不回读音效，点过之后以本地选择为准。 */
+        private var local: HuaweiSoundEffect? = null
 
         override fun render(state: EarbudState) {
             val views = items.mapNotNull(WeakReference<View>::get)
             if (views.size != this.items.size) return
-            val projected = HuaweiSoundEffectCardPolicy.render(state)
+            val projected = HuaweiSoundEffectCardPolicy.render(state).let { it.copy(effect = it.effect ?: local) }
             views.forEachIndexed { index, view ->
                 val selected = HuaweiSoundEffect.entries[index] == projected.effect
                 view.setNativeChoiceEnabled(projected.enabled)
@@ -107,10 +106,13 @@ internal object HuaweiSoundEffectMiLinkCardAdapter : MiLinkCardAdapter {
 
         fun onEffectClicked(effect: HuaweiSoundEffect) {
             val current = environment.stateProvider(address)
-            val requested = HuaweiSoundEffectCardPolicy.request(current, effect) ?: return
+            val state = HuaweiSoundEffectCardPolicy.render(current)
+            if (!state.enabled) return
+            if (state.effect == effect) return
+            local = effect
             environment.controlSender(
                 address,
-                HuaweiSoundEffectRequest.SetSoundEffect(requested),
+                HuaweiSoundEffectRequest.SetSoundEffect(effect),
             )
         }
 
@@ -243,14 +245,13 @@ internal object HuaweiSoundEffectCardPolicy {
         val enabled: Boolean,
     )
 
-    fun render(state: EarbudState): CardState {
-        val feature = state.features.get<HuaweiSoundEffectFeatureState>()
-        return CardState(
-            effect = feature?.effect,
-            enabled = state.sessionActive && state.privateChannelConnected && state.handshakeAccepted &&
-                state.lifecycle.controlOwnership == ControlOwnership.MODULE && feature != null,
-        )
-    }
+    fun render(state: EarbudState): CardState = CardState(
+        // 没有回读时按「默认」呈现，点过之后由卡片自身记录。
+        effect = state.features.get<HuaweiSoundEffectFeatureState>()?.effect
+            ?: HuaweiSoundEffect.STANDARD,
+        enabled = state.sessionActive && state.privateChannelConnected && state.handshakeAccepted &&
+            state.lifecycle.controlOwnership == ControlOwnership.MODULE,
+    )
 
     fun request(state: EarbudState, effect: HuaweiSoundEffect): HuaweiSoundEffect? {
         val current = render(state)
