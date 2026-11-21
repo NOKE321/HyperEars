@@ -46,6 +46,34 @@ data class NativeHeadsetProjection(
         get() = if (form == HeadsetFormFactor.TWS) "earphone" else "single_battery_head"
 
     companion object {
+        private data class Known(val left: BatteryReading, val right: BatteryReading, val case: BatteryReading)
+
+        private val known = mutableMapOf<String, Known>()
+
+        /** 记住每个地址最后一次已知的电量，缺失时沿用，避免布局抖动。 */
+        private fun rememberBattery(
+            address: String,
+            left: BatteryReading,
+            right: BatteryReading,
+            case: BatteryReading,
+        ): Pair<BatteryReading, BatteryReading> {
+            val previous = known[address]
+            val bestLeft = if (left.available) left else right.takeIf { it.available } ?: previous?.left ?: left
+            val bestRight = if (right.available) right else left.takeIf { it.available } ?: previous?.right ?: right
+            val bestCase = if (case.available) case else previous?.case ?: case
+            known[address] = Known(bestLeft, bestRight, bestCase)
+            val mergedPercent = listOfNotNull(
+                bestLeft.percent?.takeIf { bestLeft.available },
+                bestRight.percent?.takeIf { bestRight.available },
+            ).maxOrNull()
+            val merged = if (mergedPercent != null) {
+                BatteryReading(mergedPercent, bestLeft.charging || bestRight.charging)
+            } else {
+                BatteryReading(null, false)
+            }
+            return merged to bestCase
+        }
+
         fun from(state: EarbudState): NativeHeadsetProjection? {
             val adapter = state.adapter ?: return null
             val address = state.address ?: return null
@@ -56,6 +84,14 @@ data class NativeHeadsetProjection(
             val single = adapter.formFactor == HeadsetFormFactor.HEADPHONES ||
                 (!battery.left.available && !battery.right.available &&
                     adapter.batterySource == BatterySource.SYSTEM_AGGREGATE)
+            // 本地私有构建：把左右耳合并成一个电量（取较高值），并记住上次已知值，
+            // 避免盒电量暂时缺失时整个布局在 2 行/3 行之间来回跳。
+            val merged = rememberBattery(
+                address,
+                left = battery.left,
+                right = battery.right,
+                case = battery.case,
+            )
             val unknown = BatteryReading(null, false)
             return NativeHeadsetProjection(
                 address = address,
@@ -63,9 +99,9 @@ data class NativeHeadsetProjection(
                 form = adapter.formFactor,
                 artwork = adapter.artwork,
                 singleBattery = single,
-                left = if (single) battery.overall else battery.left,
-                right = if (single) unknown else battery.right,
-                chargingCase = if (single) unknown else battery.case,
+                left = if (single) battery.overall else merged.first,
+                right = if (single) unknown else BatteryReading(null, false),
+                chargingCase = if (single) unknown else merged.second,
             )
         }
     }
