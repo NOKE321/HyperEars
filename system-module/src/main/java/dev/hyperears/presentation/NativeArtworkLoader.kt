@@ -14,7 +14,9 @@ import dev.hyperears.integration.HeadsetArtworkId
 /** Only bundled, namespaced resources can cross into the native host. No paths or network URLs. */
 internal class NativeArtworkLoader(context: Context) {
     private val resources = context.packageManager.getResourcesForApplication(ModuleContract.MODULE_PACKAGE)
-    private val filesDir = context.filesDir
+    private val filesDir = runCatching {
+        context.createPackageContext(ModuleContract.MODULE_PACKAGE, 0).filesDir
+    }.getOrNull()
     private val cache = object : LruCache<String, Bitmap>(4 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
     }
