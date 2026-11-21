@@ -321,10 +321,8 @@ internal class HuaweiFreeClipAdapter : HuaweiFreebudsProtocolAdapter(
     override val displayName: String = "HUAWEI FreeClip"
     override val resolution: AdapterResolution = AdapterResolution.EXACT_MATCH
 
-    override val miLinkCardPresentationId: MiLinkCardPresentationId?
-        get() = HuaweiMiLinkPresentationIds.SOUND_EFFECT.takeIf {
-            runtimeState().features.get<HuaweiSoundEffectFeatureState>() != null
-        }
+    override val miLinkCardPresentationId: MiLinkCardPresentationId? =
+        HuaweiMiLinkPresentationIds.SOUND_EFFECT
 
     override fun matches(identity: EarbudIdentity): Boolean =
         super.matches(identity) &&
@@ -343,8 +341,8 @@ private val SOUND_EFFECT_EXTENSION = object : HuaweiProtocolExtension {
         state is HuaweiSoundEffectFeatureState
 
     override fun supportsRequest(adapter: EarbudAdapter, request: ControlRequest): Boolean =
-        request is HuaweiSoundEffectRequest.SetSoundEffect &&
-            adapter.runtimeState().features.get<HuaweiSoundEffectFeatureState>() != null
+        // FreeClip 只回 ACK 不回读音效，因此不能用「已有特性状态」当准入条件。
+        request is HuaweiSoundEffectRequest.SetSoundEffect && adapter.id == HuaweiFreeClipAdapter.ID
 
     override fun encode(request: ControlRequest): ByteArray? =
         (request as? HuaweiSoundEffectRequest.SetSoundEffect)?.let {
