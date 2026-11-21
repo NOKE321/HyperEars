@@ -12,8 +12,9 @@ internal data class HuaweiProtocolProfile(
         require(NoiseMode.WIND !in noiseModes) {
             "Huawei FreeBuds SPP does not define a wind-noise mode"
         }
-        require(extension == null || noiseTelemetryEnabled) {
-            "Huawei protocol extensions require a noise-capable profile"
+        // 音效一类扩展与降噪无关，只要扩展自己声明了特性就可以挂在无降噪型号上。
+        require(extension == null || noiseTelemetryEnabled || extension.featureIds.isNotEmpty()) {
+            "Huawei protocol extensions require a noise-capable profile or explicit features"
         }
     }
 }
@@ -33,6 +34,12 @@ internal interface HuaweiProtocolExtension {
     fun controlPolicy(request: ControlRequest): ControlExecutionPolicy? = null
 
     fun readback(request: ControlRequest): List<ByteArray> = emptyList()
+
+    /** 非降噪状态的扩展上报（例如音效选择），由具体型号解析。 */
+    fun state(frame: HuaweiFreebudsSppCodec.Frame): DeviceFeatureState? = null
+
+    /** 扩展特性的状态查询帧；返回空表示走通用降噪查询。 */
+    fun query(featureId: String): List<ByteArray> = emptyList()
 }
 
 internal abstract class HuaweiFreebudsProtocolAdapter(
@@ -170,18 +177,20 @@ private class HuaweiFreebudsProtocolSession(
 
     override fun query(request: TelemetryQuery): List<ByteArray> = when (request) {
         TelemetryQuery.RefreshAll -> telemetryQueries()
-        is TelemetryQuery.RefreshFeature -> when {
-            request.featureId == BatteryFeatureState.FEATURE_ID ->
-                listOf(HuaweiFreebudsSppCodec.queryBattery)
+        is TelemetryQuery.RefreshFeature ->
+            profile.extension?.query(request.featureId)?.takeIf { it.isNotEmpty() }
+                ?: when {
+                    request.featureId == BatteryFeatureState.FEATURE_ID ->
+                        listOf(HuaweiFreebudsSppCodec.queryBattery)
 
-            request.featureId == NoiseModeFeatureState.FEATURE_ID ||
-                request.featureId in profile.extension?.featureIds.orEmpty() ->
-                listOf(HuaweiFreebudsSppCodec.queryNoiseState)
-                    .takeIf { profile.noiseTelemetryEnabled }
-                    .orEmpty()
+                    request.featureId == NoiseModeFeatureState.FEATURE_ID ||
+                        request.featureId in profile.extension?.featureIds.orEmpty() ->
+                        listOf(HuaweiFreebudsSppCodec.queryNoiseState)
+                            .takeIf { profile.noiseTelemetryEnabled }
+                            .orEmpty()
 
-            else -> emptyList()
-        }
+                    else -> emptyList()
+                }
     }
 
     override fun readback(request: ControlRequest): List<ByteArray> = when (request) {
@@ -227,6 +236,8 @@ private class HuaweiFreebudsProtocolSession(
                 publishHandshakeIfNeeded()
                 return@forEach
             }
+
+            profile.extension?.state(frame)?.let { add(ProtocolEvent.FeatureStateChanged(it)) }
 
             if (profile.noiseTelemetryEnabled) {
                 HuaweiFreebudsSppCodec.parseNoiseState(frameBytes)?.let { state ->
@@ -290,4 +301,87 @@ private val HUAWEI_FAMILY_PROFILE = HuaweiProtocolProfile(
 
 private val FREECLIP_PROFILE = HuaweiProtocolProfile(
     noiseModes = emptySet(),
+)
+
+/**
+ * HUAWEI FreeClip（初代）：没有降噪，但支持 0x2B49 音效切换。
+ *
+ * 音效是独立特性，因此只挂扩展、不声明任何降噪模式；MiLink 卡片通过
+ * [HuaweiMiLinkPresentationIds.SOUND_EFFECT] 借用原生三态槽位呈现三个音效。
+ */
+internal class HuaweiFreeClipAdapter : HuaweiFreebudsProtocolAdapter(
+    endpointPrefix = "huawei-freeclip",
+    channelNumbers = listOf(1),
+    profile = FREECLIP_SOUND_PROFILE,
+) {
+    override val id: String = ID
+    override val displayName: String = "HUAWEI FreeClip"
+    override val resolution: AdapterResolution = AdapterResolution.EXACT_MATCH
+
+    override val miLinkCardPresentationId: MiLinkCardPresentationId?
+        get() = HuaweiMiLinkPresentationIds.SOUND_EFFECT.takeIf {
+            runtimeState().features.get<HuaweiSoundEffectFeatureState>() != null
+        }
+
+    override fun matches(identity: EarbudIdentity): Boolean =
+        super.matches(identity) &&
+            normalizeDeviceName(identity.deviceName.orEmpty()) in MODEL_NAMES
+
+    companion object {
+        const val ID = "huawei-freeclip"
+        private val MODEL_NAMES = setOf("huaweifreeclip", "freeclip")
+    }
+}
+
+private val SOUND_EFFECT_EXTENSION = object : HuaweiProtocolExtension {
+    override val featureIds: Set<String> = setOf(HuaweiSoundEffectFeatureState.FEATURE_ID)
+
+    override fun acceptsState(state: DeviceFeatureState): Boolean =
+        state is HuaweiSoundEffectFeatureState
+
+    override fun supportsRequest(adapter: EarbudAdapter, request: ControlRequest): Boolean =
+        request is HuaweiSoundEffectRequest.SetSoundEffect &&
+            adapter.runtimeState().features.get<HuaweiSoundEffectFeatureState>() != null
+
+    override fun encode(request: ControlRequest): ByteArray? =
+        (request as? HuaweiSoundEffectRequest.SetSoundEffect)?.let {
+            HuaweiFreebudsSppCodec.soundEffectCommand(it.effect.toWireSoundEffect())
+        }
+
+    override fun state(
+        mode: HuaweiFreebudsSppCodec.NoiseMode,
+        level: Int?,
+    ): DeviceFeatureState? = null
+
+    override fun state(frame: HuaweiFreebudsSppCodec.Frame): DeviceFeatureState? {
+        val effect = HuaweiFreebudsSppCodec.parseSoundEffectState(frame.bytes) ?: return null
+        return HuaweiSoundEffectFeatureState(effect.toDomainSoundEffect())
+    }
+
+    override fun query(featureId: String): List<ByteArray> =
+        if (featureId == HuaweiSoundEffectFeatureState.FEATURE_ID) {
+            listOf(HuaweiFreebudsSppCodec.querySoundEffect)
+        } else {
+            emptyList()
+        }
+
+    override fun controlPolicy(request: ControlRequest): ControlExecutionPolicy? =
+        if (request is HuaweiSoundEffectRequest.SetSoundEffect) {
+            // 耳机只回 ACK 不回读，改完用 2B 4A 回读一次确认。
+            ControlExecutionPolicy(confirmation = ControlConfirmationPolicy.DEVICE_REPORT)
+        } else {
+            null
+        }
+
+    override fun readback(request: ControlRequest): List<ByteArray> =
+        if (request is HuaweiSoundEffectRequest.SetSoundEffect) {
+            listOf(HuaweiFreebudsSppCodec.querySoundEffect)
+        } else {
+            emptyList()
+        }
+}
+
+private val FREECLIP_SOUND_PROFILE = HuaweiProtocolProfile(
+    noiseModes = emptySet(),
+    extension = SOUND_EFFECT_EXTENSION,
 )
