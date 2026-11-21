@@ -24,15 +24,6 @@ internal class AutoStartDrawableWrapper(
         return changed
     }
 
-    override fun getIntrinsicWidth(): Int = (super.getIntrinsicWidth() * scale()).toInt()
-
-    override fun getIntrinsicHeight(): Int = (super.getIntrinsicHeight() * scale()).toInt()
-
-    private fun scale(): Float = runCatching {
-        val file = File(filesDir ?: return DEFAULT_SCALE, SCALE_NAME)
-        if (!file.isFile) return DEFAULT_SCALE
-        file.readText().trim().toFloatOrNull()?.coerceIn(0.5f, 4.0f) ?: DEFAULT_SCALE
-    }.getOrDefault(DEFAULT_SCALE)
 
     private companion object {
         const val SCALE_NAME = "artscale.txt"
