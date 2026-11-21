@@ -39,18 +39,20 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Create local keystore
+      - name: Restore local keystore
         shell: bash
         run: |
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/hyperears.jks" \
-            -storepass hyperears -keypass hyperears \
-            -alias hyperears -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=HyperEars Local Build"
+          mkdir -p "$RUNNER_TEMP/ks"
+          base64 --decode .local-build/hyperears.p12.b64 > "$RUNNER_TEMP/ks/hyperears.p12"
+          keytool -importkeystore \
+            -srckeystore "$RUNNER_TEMP/ks/hyperears.p12" -srcstoretype PKCS12 \
+            -srcstorepass hyperears \
+            -destkeystore "$RUNNER_TEMP/ks/hyperears.jks" -deststoretype JKS \
+            -deststorepass hyperears -destkeypass hyperears -noprompt
 
       - name: Build release
         env:
-          HYPEREARS_KEYSTORE_PATH: ${{ runner.temp }}/hyperears.jks
+          HYPEREARS_KEYSTORE_PATH: ${{ runner.temp }}/ks/hyperears.jks
           HYPEREARS_KEYSTORE_PASSWORD: hyperears
           HYPEREARS_KEY_ALIAS: hyperears
           HYPEREARS_KEY_PASSWORD: hyperears
