@@ -269,6 +269,9 @@ private class HuaweiFreebudsProtocolSession(
     private fun telemetryQueries(): List<ByteArray> = buildList {
         add(HuaweiFreebudsSppCodec.queryBattery)
         if (profile.noiseTelemetryEnabled) add(HuaweiFreebudsSppCodec.queryNoiseState)
+        profile.extension?.let { extension ->
+            extension.featureIds.forEach { addAll(extension.query(it)) }
+        }
     }
 
     private fun MutableList<ProtocolEvent>.publishHandshakeIfNeeded() {
@@ -381,7 +384,12 @@ private val SOUND_EFFECT_EXTENSION = object : HuaweiProtocolExtension {
         }
 }
 
+/**
+ * 音效卡片借用 MiLink 的降噪三态槽位，因此这里必须声明降噪模式，
+ * 否则整块「噪声控制」卡片根本不会被创建，三个音效也就没有落点。
+ * 实际点击由卡片适配器接管，不会下发任何降噪指令。
+ */
 private val FREECLIP_SOUND_PROFILE = HuaweiProtocolProfile(
-    noiseModes = emptySet(),
+    noiseModes = setOf(NoiseMode.ANC, NoiseMode.OFF, NoiseMode.TRANSPARENCY),
     extension = SOUND_EFFECT_EXTENSION,
 )
