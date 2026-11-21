@@ -376,73 +376,36 @@ internal abstract class NativeWindowBridge(
     }
 
     private fun tuneHeadsetImage(root: ViewGroup, scale: Float) {
-        val image = findHeadsetImage(root) as? ImageView
-        if (image == null) {
-            ModuleLog.debug(TAG, "artwork tuning: headset image not found")
-            return
+        val seen = StringBuilder()
+        fun visit(view: View) {
+            if (view is ImageView) {
+                seen.append(view.width).append('x').append(view.height).append(' ')
+                val square = view.width == view.height && view.width >= 80
+                val ours = view.drawable is AutoStartDrawableWrapper
+                if (square || ours) resize(view, scale)
+            }
+            if (view is ViewGroup) for (i in 0 until view.childCount) visit(view.getChildAt(i))
         }
-        ModuleLog.debug(TAG, "artwork tuning: found ${image.width}x${image.height}")
-        scaleAllSquareImages(root)
-        val cardWidth = (root.width * 0.74f).toInt().coerceAtLeast(400)
-        val width = (cardWidth * scale / 1.8f).toInt()
-        val drawable = image.drawable
-        val aspect = if (drawable != null && drawable.intrinsicWidth > 0) {
-            drawable.intrinsicHeight.toFloat() / drawable.intrinsicWidth
-        } else {
-            428f / 900f
-        }
-        val params = image.layoutParams
-        params.width = width
-        params.height = (width * aspect).toInt()
-        image.layoutParams = params
-        image.scaleType = ImageView.ScaleType.FIT_CENTER
-        var parent = image.parent
+        visit(root)
+        ModuleLog.debug(TAG, "artwork tuning: images=[$seen]")
+    }
+
+    private fun resize(view: ImageView, scale: Float) {
+        val base = if (view.width > 0) view.width else 352
+        val params = view.layoutParams
+        params.width = (base * scale).toInt()
+        params.height = (base * scale * 0.48f).toInt()
+        view.layoutParams = params
+        view.scaleType = ImageView.ScaleType.FIT_CENTER
+        var parent = view.parent
         while (parent is ViewGroup) {
             parent.clipChildren = false
             parent.clipToOutline = false
             parent = parent.parent
         }
+        ModuleLog.debug(TAG, "artwork tuning: resized ${base} -> ${params.width}x${params.height}")
     }
 
-    private fun scaleAllSquareImages(view: View) {
-        if (view is ImageView && view.width == view.height && view.width >= 120) {
-            val params = view.layoutParams
-            params.width = (view.width * 2.1f).toInt()
-            params.height = (view.width * 0.95f).toInt()
-            view.layoutParams = params
-            view.scaleType = ImageView.ScaleType.FIT_CENTER
-            var parent = view.parent
-            while (parent is ViewGroup) {
-                parent.clipChildren = false
-                parent.clipToOutline = false
-                parent = parent.parent
-            }
-            ModuleLog.debug(TAG, "artwork tuning: square image resized ${view.width}")
-        }
-        if (view is ViewGroup) {
-            for (i in 0 until view.childCount) scaleAllSquareImages(view.getChildAt(i))
-        }
-    }
-
-    private fun findHeadsetImage(view: View): View? {
-        if (view is ImageView) {
-            if (view.drawable is AutoStartDrawableWrapper) return view
-            val name = runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
-            if (name == "imageViewHeadset") return view
-        }
-        if (view is ViewGroup) {
-            for (i in 0 until view.childCount) findHeadsetImage(view.getChildAt(i))?.let { return it }
-            // 兜底：弹窗里最大的正方形 ImageView
-            var best: ImageView? = null
-            for (i in 0 until view.childCount) {
-                val child = view.getChildAt(i)
-                if (child is ImageView && child.width == child.height && child.width > 120 &&
-                    (best == null || child.width > best!!.width)) best = child
-            }
-            if (best != null) return best
-        }
-        return null
-    }
 
 
     protected fun charging(p: NativeHeadsetProjection): Int =
