@@ -1,6 +1,7 @@
 package dev.hyperears.presentation
 
 import android.app.Activity
+import android.app.Dialog
 import android.bluetooth.BluetoothDevice
 import android.content.ComponentName
 import android.content.Context
@@ -359,7 +360,11 @@ internal abstract class NativeWindowBridge(
     /** 本地私有构建：把系统弹窗的方形图标槽位改成与素材同比例的宽矩形。 */
     private fun scheduleArtworkTuning(binding: Binding) {
         ModuleLog.debug(TAG, "artwork tuning: scheduled")
-        val decor = binding.activity.window?.decorView as? ViewGroup
+        val dialog = runCatching {
+            NativeMembers.field(binding.activity.javaClass, "mPairingAlert").get(binding.activity) as? Dialog
+        }.getOrNull()
+        val decor = (dialog?.window?.decorView as? ViewGroup)
+            ?: (binding.activity.window?.decorView as? ViewGroup)
         if (decor == null) {
             ModuleLog.debug(TAG, "artwork tuning: decorView null")
             return
