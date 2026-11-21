@@ -37,6 +37,10 @@ data class NativeHeadsetProjection(
     val showCaseInPopup: Boolean
         get() = form == HeadsetFormFactor.TWS && !singleBattery && chargingCase.available
 
+    /** 左右耳电量相同：宿主与状态栏都会当成一个电量，弹窗里只保留一行。 */
+    val mergedEars: Boolean
+        get() = !singleBattery && left.available && left.percent != null && left.percent == right.percent
+
     // The native connected island needs ear/headphone telemetry. Its single-battery template
     // becomes an invalid icon-only model before a reading exists; a case reading cannot fill it.
     val canShowConnectionHint: Boolean get() = left.available || right.available
@@ -100,7 +104,8 @@ data class NativeHeadsetProjection(
                 artwork = adapter.artwork,
                 singleBattery = single,
                 left = if (single) battery.overall else merged.first,
-                right = if (single) unknown else BatteryReading(null, false),
+                // 左右耳报同一个值：状态栏（岛）只有在两个值相同时才会合并成一个图标 + 一个百分比。
+                right = if (single) unknown else merged.first,
                 chargingCase = if (single) unknown else merged.second,
             )
         }
