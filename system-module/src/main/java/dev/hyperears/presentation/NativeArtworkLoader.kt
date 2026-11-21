@@ -22,7 +22,7 @@ internal class NativeArtworkLoader(context: Context) {
     }
 
     /** 本地私有构建：命中时返回流式播放的动画 WebP（AnimatedImageDrawable）。 */
-    private val animatedArtworks = setOf("headset_generic_earbuds")
+    private val animatedArtworks = setOf("headset_generic_earbuds", "headset_generic_case")
 
     @Suppress("DiscouragedApi")
     @android.annotation.SuppressLint("DiscouragedApi")
