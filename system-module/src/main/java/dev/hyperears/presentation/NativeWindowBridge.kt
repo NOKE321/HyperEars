@@ -413,7 +413,6 @@ internal abstract class NativeWindowBridge(
         return null
     }
 
-getOrDefault(1f)
 
     protected fun charging(p: NativeHeadsetProjection): Int =
         (if (p.left.charging) 1 else 0) or (if (p.right.charging) 2 else 0) or
