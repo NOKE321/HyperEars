@@ -364,7 +364,18 @@ internal abstract class NativeWindowBridge(
         val root = (dialog?.window?.decorView as? ViewGroup)
             ?: (binding.activity.window?.decorView as? ViewGroup)
             ?: return
-        for (delay in longArrayOf(0L, 50L, 120L, 300L, 700L, 1400L)) {
+        // 绘制前应用，避免首帧先显示小图再跳大
+        root.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                try {
+                    tuneArtwork(root, ARTWORK_SCALE)
+                } catch (error: Throwable) {
+                    ModuleLog.warn(TAG, "artwork preDraw failed", error)
+                }
+                return true
+            }
+        })
+        for (delay in longArrayOf(120L, 400L, 900L, 1600L)) {
             root.postDelayed({
                 try {
                     tuneArtwork(root, ARTWORK_SCALE)
