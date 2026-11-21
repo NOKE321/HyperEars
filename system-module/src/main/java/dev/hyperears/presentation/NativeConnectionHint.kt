@@ -34,7 +34,9 @@ internal class NativeConnectionHint(private val stateGetter: Method) : HookConte
                 String::class.java, String::class.java)
             hookBefore(resource) {
                 val state = current.get() ?: return@hookBefore
-                if (state.singleBattery && state.form == HeadsetFormFactor.TWS &&
+                // 本地私有构建：TWS 一律用「两只耳机并排 + 一个百分比」的单电量模板，
+                // 不再跟随左右耳分开展示。
+                if (state.form == HeadsetFormFactor.TWS &&
                     args[0] == "single_battery_head" && args[1] == null) {
                     result = resource.invoke(instance, state.singleBatteryHintArtwork, null)
                 }
@@ -56,7 +58,7 @@ internal class NativeConnectionHint(private val stateGetter: Method) : HookConte
         }
         val native = NativeMembers.field(notificationType, "mMiuiBluetoothNotification").get(null)
             ?: return NativePresentationResult.HOST_UNAVAILABLE
-        if (projection.singleBattery && projection.form == HeadsetFormFactor.TWS &&
+        if (projection.form == HeadsetFormFactor.TWS &&
             runCatching { singleBatteryResource?.invoke(native, projection.singleBatteryHintArtwork, null) }
                 .getOrNull() == null) {
             ModuleLog.debug("NativeHint", "not submitted: single-battery TWS resource unavailable")
@@ -67,7 +69,8 @@ internal class NativeConnectionHint(private val stateGetter: Method) : HookConte
         return try {
             NativeMembers.method(notificationType, "showConnectToastForAirPods",
                 Int::class.javaPrimitiveType!!, BluetoothDevice::class.java, Int::class.javaPrimitiveType!!)
-                .invoke(native, 2, device, if (projection.singleBattery) 3 else 0)
+                // 3 = 单电量模板（状态栏/通知里只有一只百分比），与华为、iOS 的观感一致。
+                .invoke(native, 2, device, if (projection.form == HeadsetFormFactor.TWS) 3 else 0)
             ModuleLog.debug("NativeHint", "submitted address=${maskBluetoothAddress(projection.address)} " +
                 "left=${projection.left.percent} right=${projection.right.percent} single=${projection.singleBattery}")
             NativePresentationResult.SUBMITTED
