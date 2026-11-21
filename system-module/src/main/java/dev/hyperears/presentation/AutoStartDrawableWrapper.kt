@@ -2,14 +2,15 @@ package dev.hyperears.presentation
 
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.DrawableWrapper
+import java.io.File
 
 /**
  * 包装 AnimatedImageDrawable：
  * 1) 宿主只调用 setImageDrawable()，这里跟随可见性自动播放/暂停；
  * 2) 放大 intrinsic 尺寸，让原生弹窗里的图更大。
  *
- * 放大倍数可通过系统属性调，不必重新编译：
- *   adb/su: setprop persist.hyperears.artscale 2.2
+ * 放大倍数读取模块私有目录里的 arscale 文件（root 可写，无需重编译）：
+ *   su -c 'echo 2.0 > /data/user/0/dev.hyperears/files/artscale.txt'
  * 默认 1.8。
  */
 internal class AutoStartDrawableWrapper(
@@ -27,14 +28,13 @@ internal class AutoStartDrawableWrapper(
     override fun getIntrinsicHeight(): Int = (super.getIntrinsicHeight() * scale()).toInt()
 
     private fun scale(): Float = runCatching {
-        val cls = Class.forName("android.os.SystemProperties")
-        val get = cls.getMethod("get", String::class.java, String::class.java)
-        ((get.invoke(null, PROP_KEY, DEFAULT_SCALE) as String).toFloatOrNull() ?: DEFAULT_SCALE)
-            .coerceIn(0.5f, 4.0f)
+        val file = File(SCALE_FILE)
+        if (!file.isFile) return DEFAULT_SCALE
+        file.readText().trim().toFloatOrNull()?.coerceIn(0.5f, 4.0f) ?: DEFAULT_SCALE
     }.getOrDefault(DEFAULT_SCALE)
 
     private companion object {
-        const val PROP_KEY = "persist.hyperears.artscale"
+        const val SCALE_FILE = "/data/user/0/dev.hyperears/files/artscale.txt"
         const val DEFAULT_SCALE = 1.8f
     }
 }
