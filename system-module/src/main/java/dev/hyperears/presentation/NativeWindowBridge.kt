@@ -274,6 +274,7 @@ internal abstract class NativeWindowBridge(
                 val root = args[0] as? View ?: return@runCatching
                 if (root !== NativeMembers.get(binding.controller, "mView")) return@runCatching
                 val p = projection(binding)
+                wrapDialogHeight(pairingDialog(binding))
                 runCatching { (root as? ViewGroup)?.let { tuneArtwork(it, ARTWORK_SCALE) } }
                 if (layout.apply(root, p)) {
                     ModuleLog.debug(TAG) {
@@ -375,10 +376,9 @@ internal abstract class NativeWindowBridge(
 
     /** 本地私有构建：放大弹窗里的耳机图（系统槽位固定为正方形）。 */
     private fun scheduleArtworkTuning(binding: Binding) {
-        val dialog = runCatching {
-            NativeMembers.field(binding.activity.javaClass, "mPairingAlert").get(binding.activity) as? Dialog
-        }.getOrNull()
+        val dialog = pairingDialog(binding)
         runCatching { dialog?.window?.setWindowAnimations(0) }
+        wrapDialogHeight(dialog)
         val root = (dialog?.window?.decorView as? ViewGroup)
             ?: (binding.activity.window?.decorView as? ViewGroup)
             ?: return
@@ -433,6 +433,25 @@ internal abstract class NativeWindowBridge(
         }
         visit(root)
         ModuleLog.debug(TAG, "artwork tuning: images=[$seen]")
+    }
+
+    private fun pairingDialog(binding: Binding): Dialog? = runCatching {
+        NativeMembers.field(binding.activity.javaClass, "mPairingAlert").get(binding.activity) as? Dialog
+    }.getOrNull()
+
+    /**
+     * 宿主的弹窗窗口高度是写死的一整块（约半屏），内容只占其中一部分，
+     * 于是图片上下就是大片空白。把窗口高度改成 wrap_content，让卡片贴着内容走。
+     */
+    private fun wrapDialogHeight(dialog: Dialog?) {
+        val window = dialog?.window ?: return
+        runCatching {
+            val attributes = window.attributes
+            if (attributes.height > 0) {
+                window.setLayout(attributes.width, ViewGroup.LayoutParams.WRAP_CONTENT)
+                ModuleLog.debug(TAG, "artwork tuning: window height wrap (was ${attributes.height})")
+            }
+        }.onFailure { ModuleLog.warn(TAG, "window height override failed", it) }
     }
 
     /** 一次性打印弹窗视图树，便于按 id/文字精确定位要调整的行。 */
@@ -519,6 +538,10 @@ internal abstract class NativeWindowBridge(
             "pairingContentView",
             "groupDialog",
             "groupConnectSuccess",
+            "imageViewHeadsetLayout",
+            "imageViewBoxLayout",
+            "textViewHeadsetBattery",
+            "textViewBoxBattery",
         )
 
         const val PREFIX = "com.android.bluetooth.ble.app.fastconnect"
