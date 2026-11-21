@@ -104,8 +104,9 @@ data class NativeHeadsetProjection(
                 artwork = adapter.artwork,
                 singleBattery = single,
                 left = if (single) battery.overall else merged.first,
-                // 左右耳报同一个值：状态栏（岛）只有在两个值相同时才会合并成一个图标 + 一个百分比。
-                right = if (single) unknown else merged.first,
+                // 实测只有「右耳没有读数」时，状态栏与 MiLink 卡片才会把双耳并成一个图标 + 一个百分比；
+                // 左右耳都报同一个数反而会画成两个 100%。
+                right = unknown,
                 chargingCase = if (single) unknown else merged.second,
             )
         }
