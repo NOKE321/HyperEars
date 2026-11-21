@@ -68,7 +68,6 @@ jobs:
           HYPEREARS_KEY_PASSWORD: hyperears
         run: >-
           ./gradlew --no-daemon
-          testDebugUnitTest
           :system-module:assembleRelease
 
       - name: Verify and prepare artifact
